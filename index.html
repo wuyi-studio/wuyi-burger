@@ -530,6 +530,69 @@
       border-color: var(--pink);
     }
 
+    /* 顧客款式複選清單（固定兩排/兩欄：左側 A~E，右側 F~J） */
+    .customer-styles-two-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 7px;
+    }
+    .customer-styles-col {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .customer-styles-extra {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 5px;
+      margin-top: 2px;
+      padding-top: 6px;
+      border-top: 1px dashed var(--border);
+    }
+    .cake-item-box {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 8px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      background: #fffaf8;
+      user-select: none;
+      transition: all 0.15s ease;
+      min-height: 36px;
+    }
+    .cake-item-box:hover {
+      border-color: var(--pink);
+      background: #fff4ee;
+    }
+    .cake-item-box.selected {
+      border-color: var(--pink);
+      background: var(--pink-light);
+      color: #8c4e42;
+    }
+    .cake-item-box input {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      accent-color: var(--pink);
+      flex-shrink: 0;
+    }
+    .cake-item-empty {
+      grid-column: 1 / -1;
+      padding: 12px;
+      text-align: center;
+      font-size: 12.5px;
+      color: #9c8276;
+      background: #fdfaf8;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+    }
+
     /* 勾選按鈕樣式 */
     .addon-box {
       display: flex;
@@ -654,14 +717,17 @@
   <!-- 一頁式精簡表單 -->
   <form id="orderForm" class="card">
 
-    <!-- 第 1 排：款式 + 取貨時間 -->
-    <div class="row-2">
-      <div>
-        <label class="field-label" for="cake">今日款式 <span class="required">*</span></label>
-        <select id="cake" name="cake" required>
-          <option value="">請選擇款式</option>
-        </select>
+    <!-- 第 1 排：款式（可複選） -->
+    <div style="margin-bottom: 7px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+        <label class="field-label" style="margin-bottom:0;">今日款式（可複選，每款 $700）<span class="required">*</span></label>
+        <span id="selectedCountText" style="font-size: 11.5px; color: #a65e51; font-weight: 700;"></span>
       </div>
+      <div class="customer-styles-two-cols" id="customerStylesList"></div>
+    </div>
+
+    <!-- 第 2 排：取貨時間 + 訂購人姓名 -->
+    <div class="row-2">
       <div>
         <label class="field-label" for="pickup">預計取貨 <span class="required">*</span></label>
         <select id="pickup" name="pickup" required>
@@ -672,18 +738,16 @@
           <option value="18:00～19:00">18:00～19:00</option>
         </select>
       </div>
-    </div>
-
-    <!-- 第 2 排：姓名 + 電話 -->
-    <div class="row-2">
       <div>
         <label class="field-label" for="name">訂購人姓名 <span class="required">*</span></label>
         <input id="name" name="name" autocomplete="name" placeholder="請輸入姓名" required>
       </div>
-      <div>
-        <label class="field-label" for="phone">聯絡電話 <span class="required">*</span></label>
-        <input id="phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="手機號碼" required>
-      </div>
+    </div>
+
+    <!-- 第 3 排：聯絡電話 -->
+    <div style="margin-bottom: 7px;">
+      <label class="field-label" for="phone">聯絡電話 <span class="required">*</span></label>
+      <input id="phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="手機號碼" required>
     </div>
 
     <!-- 第 3 排：加購項目（2人、5人、10人餐具組 + 保冷袋） -->
@@ -850,7 +914,8 @@ const cloudSyncStatus = document.getElementById("cloudSyncStatus");
 const dateBadge = document.getElementById("dateBadge");
 const expiredCard = document.getElementById("expiredCard");
 const activeContent = document.getElementById("activeContent");
-const cakeSelect = document.getElementById("cake");
+const customerStylesList = document.getElementById("customerStylesList");
+const selectedCountText = document.getElementById("selectedCountText");
 const customInputs = Array.from(document.querySelectorAll(".custom-style-input"));
 
 function getTodayInfo() {
@@ -1022,32 +1087,80 @@ function getActiveStyles() {
   return combined.length > 0 ? combined : ["（今日尚無款式）"];
 }
 
-function renderSelect() {
-  const prevValue = cakeSelect.value;
-  const styles = getActiveStyles();
-  cakeSelect.innerHTML = "";
+function createCakeItemElement(s, isChecked) {
+  const label = document.createElement("label");
+  label.className = "cake-item-box" + (isChecked ? " selected" : "");
 
-  const defaultOpt = document.createElement("option");
-  defaultOpt.value = "";
-  defaultOpt.textContent = "請選擇款式";
-  cakeSelect.appendChild(defaultOpt);
+  const chk = document.createElement("input");
+  chk.type = "checkbox";
+  chk.name = "cakes";
+  chk.value = s;
+  chk.checked = isChecked;
 
-  styles.forEach(s => {
-    const opt = document.createElement("option");
-    if (s === "（今日尚無款式）") {
-      opt.value = "";
-      opt.textContent = s;
-      opt.disabled = true;
+  chk.addEventListener("change", () => {
+    if (chk.checked) {
+      label.classList.add("selected");
     } else {
-      opt.value = s;
-      opt.textContent = s;
+      label.classList.remove("selected");
     }
-    cakeSelect.appendChild(opt);
+    updateTotal();
   });
 
-  if (prevValue && styles.includes(prevValue) && prevValue !== "（今日尚無款式）") {
-    cakeSelect.value = prevValue;
+  const span = document.createElement("span");
+  span.textContent = s;
+
+  label.appendChild(chk);
+  label.appendChild(span);
+  return label;
+}
+
+function renderSelect() {
+  if (!customerStylesList) return;
+  const styles = getActiveStyles();
+  
+  // 保留目前顧客已勾選的款式
+  const currentlyChecked = new Set();
+  customerStylesList.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+    currentlyChecked.add(cb.value);
+  });
+
+  customerStylesList.innerHTML = "";
+
+  if (styles.length === 1 && styles[0] === "（今日尚無款式）") {
+    const emptyDiv = document.createElement("div");
+    emptyDiv.className = "cake-item-empty";
+    emptyDiv.textContent = "今日款式準備中，請稍後重整或至 LINE 洽詢 ♡";
+    customerStylesList.appendChild(emptyDiv);
+    updateTotal();
+    return;
   }
+
+  // 依當日總款式數量動態分配成左右兩排（右排永遠大於或等於左排）：
+  // 5 款 -> 左 2 款 (A1, A2)、右 3 款 (B1, C, D)
+  // 6 款 -> 左 3 款 (A, B, C)、右 3 款 (D, E, F)
+  // 7 款 -> 左 3 款、右 4 款
+  const leftCount = Math.floor(styles.length / 2);
+  const leftItems = styles.slice(0, leftCount);
+  const rightItems = styles.slice(leftCount);
+
+  // 左排欄位
+  const leftCol = document.createElement("div");
+  leftCol.className = "customer-styles-col";
+  leftItems.forEach(s => {
+    leftCol.appendChild(createCakeItemElement(s, currentlyChecked.has(s)));
+  });
+
+  // 右排欄位
+  const rightCol = document.createElement("div");
+  rightCol.className = "customer-styles-col";
+  rightItems.forEach(s => {
+    rightCol.appendChild(createCakeItemElement(s, currentlyChecked.has(s)));
+  });
+
+  customerStylesList.appendChild(leftCol);
+  customerStylesList.appendChild(rightCol);
+
+  updateTotal();
 }
 
 function togglePreset(label) {
@@ -1405,6 +1518,8 @@ copyHtmlBtn.onclick = async () => {
   clone.querySelector("#outputField").textContent = "";
   clone.querySelector("#adminPwdInput").value = "";
   clone.querySelector("#pwdError").textContent = "";
+  const cloneStylesList = clone.querySelector("#customerStylesList");
+  if (cloneStylesList) cloneStylesList.innerHTML = "";
   const existingFallback = clone.querySelector("#lineFallbackLink");
   if (existingFallback) existingFallback.remove();
 
@@ -1450,13 +1565,31 @@ const utensils5Chk = document.getElementById("utensils5Chk");
 const utensils10Chk = document.getElementById("utensils10Chk");
 const coolerChk = document.getElementById("coolerChk");
 
+function getSelectedCakes() {
+  if (!customerStylesList) return [];
+  return Array.from(customerStylesList.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+}
+
 function updateTotal() {
+  const selectedCakes = getSelectedCakes();
+  const cakeCount = selectedCakes.length;
+  const cakeTotal = cakeCount * 700;
+
+  if (selectedCountText) {
+    if (cakeCount > 0) {
+      selectedCountText.textContent = `已選 ${cakeCount} 個（$${cakeTotal}）`;
+    } else {
+      selectedCountText.textContent = "尚未選擇款式";
+    }
+  }
+
   const u2 = utensils2Chk.checked ? 15 : 0;
   const u5 = utensils5Chk.checked ? 30 : 0;
   const u10 = utensils10Chk.checked ? 50 : 0;
   const utensilsTotal = u2 + u5 + u10;
   const cooler = coolerChk.checked ? 100 : 0;
-  document.getElementById("total").textContent = "$" + (700 + utensilsTotal + cooler);
+  const total = cakeTotal + utensilsTotal + cooler;
+  document.getElementById("total").textContent = "$" + total;
 }
 
 paidChk.addEventListener("change", () => {
@@ -1494,13 +1627,24 @@ form.addEventListener("submit", function(event) {
   event.preventDefault();
   if (!form.reportValidity()) return;
 
+  const selectedCakes = getSelectedCakes();
+  if (selectedCakes.length === 0) {
+    alert("請至少選擇一種漢堡盒款式！");
+    if (customerStylesList) {
+      customerStylesList.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    return;
+  }
+
   const data = new FormData(form);
+  const cakeCount = selectedCakes.length;
+  const cakeTotal = cakeCount * 700;
   const u2 = utensils2Chk.checked ? 15 : 0;
   const u5 = utensils5Chk.checked ? 30 : 0;
   const u10 = utensils10Chk.checked ? 50 : 0;
   const utensilsTotal = u2 + u5 + u10;
   const cooler = coolerChk.checked ? 100 : 0;
-  const total = 700 + utensilsTotal + cooler;
+  const total = cakeTotal + utensilsTotal + cooler;
   const isPaid = paidChk.checked;
   const currentToday = getTodayInfo();
 
@@ -1513,7 +1657,7 @@ form.addEventListener("submit", function(event) {
   const message = [
     `🍔【${currentToday.short} 現貨漢堡盒預留需求】`,
     "",
-    "款式：" + (data.get("cake") || "").trim(),
+    `款式（共 ${cakeCount} 個）：\n  • ` + selectedCakes.join("\n  • "),
     "訂購人：" + (data.get("name") || "").trim(),
     "聯絡電話：" + normalizeInput(data.get("phone") || ""),
     "預計取貨：" + data.get("pickup"),
@@ -1522,7 +1666,7 @@ form.addEventListener("submit", function(event) {
     "餐具組：" + tablewareText,
     "保冷袋及保冷劑：" + (cooler ? "需要（$100）" : "不需要"),
     "",
-    "蛋糕金額：$700",
+    `蛋糕金額：$${cakeTotal}（${cakeCount}個）`,
     "餐具金額：$" + utensilsTotal,
     "保冷組金額：$" + cooler,
     "應付總金額：$" + total,
